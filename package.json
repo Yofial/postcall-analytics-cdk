@@ -1,0 +1,20 @@
+{
+  "name": "postcall-analytics-cdk",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Post-Call Analytics MVP – CDK (JavaScript)",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "deploy": "cdk deploy --all",
+    "destroy": "cdk destroy --all"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.130.0",
+    "constructs": "^10.3.0",
+    "@aws-sdk/client-s3": "^3.552.0",
+    "@aws-sdk/client-sqs": "^3.552.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.552.0",
+    "@aws-sdk/client-step-functions": "^3.552.0"
+  }
+}
+

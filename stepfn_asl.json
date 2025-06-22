@@ -1,0 +1,98 @@
+{
+  "Comment": "Post-Call Analytics – Transcribe & Bedrock",
+  "StartAt": "PrepareJob",
+  "TimeoutSeconds": 1800,
+  "States": {
+    "PrepareJob": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${PrepareJobLambdaArn}",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.prepare",
+      "Next": "StartTranscribe"
+    },
+    "StartTranscribe": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:transcribe:startTranscriptionJob",
+      "Parameters": {
+        "TranscriptionJobName.$": "$.prepare.jobName",
+        "Media": { "MediaFileUri.$": "$.prepare.mediaUri" },
+        "LanguageCode": "he-IL",
+        "OutputBucketName": "${TranscribeOutputBucket}"
+      },
+      "ResultPath": "$.transcribeStart",
+      "Next": "Wait30"
+    },
+    "Wait30": { "Type": "Wait", "Seconds": 30, "Next": "PollJob" },
+    "PollJob": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:transcribe:getTranscriptionJob",
+      "Parameters": { "TranscriptionJobName.$": "$.prepare.jobName" },
+      "ResultPath": "$.job",
+      "Next": "IsDone"
+    },
+    "IsDone": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.job.TranscriptionJob.TranscriptionJobStatus",
+          "StringEquals": "COMPLETED",
+          "Next": "SlimJson"
+        },
+        {
+          "Variable": "$.job.TranscriptionJob.TranscriptionJobStatus",
+          "StringEquals": "FAILED",
+          "Next": "Fail"
+        }
+      ],
+      "Default": "Wait30"
+    },
+    "SlimJson": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${SlimJsonLambdaArn}",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.slim",
+      "Next": "RunBedrock"
+    },
+    "RunBedrock": {
+      "Type": "Map",
+      "ItemsPath": "$.slim.promptList",
+      "ResultPath": "$.results",
+      "Iterator": {
+        "StartAt": "SendMsg",
+        "States": {
+          "SendMsg": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::sqs:sendMessage.waitForTaskToken",
+            "Parameters": {
+              "QueueUrl": "${BedrockInvocationQueue}",
+              "MessageBody": {
+                "taskToken.$": "$$.Task.Token",
+                "promptId.$": "$.Map.Item.Value",
+                "callId.$": "$.slim.callId"
+              }
+            },
+            "End": true
+          }
+        }
+      },
+      "Next": "Collect"
+    },
+    "Collect": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${CollectResultsLambdaArn}",
+        "Payload.$": "$"
+      },
+      "End": true
+    },
+    "Fail": { "Type": "Fail" }
+  }
+}
+
